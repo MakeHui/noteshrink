@@ -270,6 +270,10 @@ def get_argument_parser():
                         default='convert %i %o',
                         help='PDF command (default "%(default)s")')
 
+    parser.add_argument('-No', dest='pdfout', action='store_false',
+                        default=True,
+                        help='is not output PDF')
+
     parser.add_argument('-r', dest='recursion_dir', action='store_true',
                         default=False,
                         help='is recursion dir')
@@ -608,7 +612,8 @@ def notescan_main(options):
         if not options.quiet:
             print('  done\n')
 
-    emit_pdf(outputs, options)
+    if options.pdfout :
+        emit_pdf(outputs, options)
 
 ######################################################################
 
