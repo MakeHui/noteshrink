@@ -205,10 +205,6 @@ def get_argument_parser():
                         default=False,
                         help='reduce program output')
 
-    parser.add_argument('-b', dest='basename', metavar='BASENAME',
-                        default='page',
-                        help='output PNG filename base' + show_default)
-
     parser.add_argument('-o', dest='pdfname', metavar='PDF',
                         default='output.pdf',
                         help='output PDF filename' + show_default)
@@ -274,11 +270,18 @@ def get_argument_parser():
                         default='convert %i %o',
                         help='PDF command (default "%(default)s")')
 
+    parser.add_argument('-r', dest='recursion_dir', action='store_true',
+                        default=False,
+                        help='is recursion dir')
+
+    parser.add_argument('-op', dest='output_path', metavar='OUTPUTPATH',
+                        default='temp',
+                        help='output path' + show_default)
     return parser
 
 ######################################################################
 
-def get_filenames(options):
+def get_filenames(options, filenames=[]):
 
     '''Get the filenames from the command line, optionally sorted by
 number, so that IMG_10.png is re-arranged to come after IMG_9.png.
@@ -290,11 +293,11 @@ pages ordered correctly.
     '''
 
     if not options.sort_numerically:
-        return options.filenames
+        return filenames
 
-    filenames = []
+    outfilenames = []
 
-    for filename in options.filenames:
+    for filename in filenames:
         basename = os.path.basename(filename)
         root, _ = os.path.splitext(basename)
         matches = re.findall(r'[0-9]+', root)
@@ -302,9 +305,36 @@ pages ordered correctly.
             num = int(matches[-1])
         else:
             num = -1
-        filenames.append((num, filename))
+        outfilenames.append((num, filename))
+    return [fn for (_, fn) in sorted(outfilenames)]
 
-    return [fn for (_, fn) in sorted(filenames)]
+
+def get_filepaths(options):
+
+    filenames = []
+    filepaths = []
+    outfilenames = []
+
+    for filepath in options.filenames:
+        fp = filepath
+        if not os.path.isabs(filepath):
+            fp = os.path.abspath(filepath)
+        if os.path.isdir(fp):
+            filepaths.append(filepath)
+        elif os.path.isfile(fp):
+            filenames.append(filepath)
+        else:
+            print('warning: {} is not dir and file\n'.format(filepath))
+            continue
+
+    outfilenames += get_filenames(options, filenames)
+    for filepath in filepaths:
+        for root, _, files in os.walk(filepath):
+            files = [os.path.join(root, file) for file in files]
+            outfilenames += get_filenames(options, files)
+            if not options.recursion_dir:
+                break
+    return outfilenames
 
 ######################################################################
 
@@ -453,7 +483,7 @@ the background color to pure white.
 
     output_img = Image.fromarray(labels, 'P')
     output_img.putpalette(palette.flatten())
-    output_img.save(output_filename, dpi=dpi)
+    output_img.save(output_filename, 'png', dpi=dpi)
 
 ######################################################################
 
@@ -532,7 +562,7 @@ def notescan_main(options):
 
     '''Main function for this program when run as script.'''
 
-    filenames = get_filenames(options)
+    filenames = get_filepaths(options)
 
     outputs = []
 
@@ -549,8 +579,11 @@ def notescan_main(options):
         if img is None:
             continue
 
-        output_filename = '{}{:04d}.png'.format(
-            options.basename, len(outputs))
+        output_filepath = os.path.join(options.output_path, os.path.dirname(input_filename))
+        if not os.path.exists(output_filepath):
+            os.makedirs(output_filepath)
+
+        output_filename = os.path.join(options.output_path, input_filename)
 
         if not options.quiet:
             print('opened', input_filename)
